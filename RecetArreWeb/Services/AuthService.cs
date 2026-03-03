@@ -58,13 +58,26 @@ namespace RecetArreWeb.Services
                 var response = await httpClient.PostAsJsonAsync($"{endpoint}/Registrar", credencialesUsuario);
                 if (response.IsSuccessStatusCode)
                 {
-                   
+                   var respuesta = await response.Content.ReadFromJsonAsync<RespuestaAutenticacion>();
+                    if (respuesta != null)
+                    {
+                        await tokenService.GuardarToken(respuesta.Token, respuesta.Expiracion);
+                        return respuesta;
+                    }
                 }
+                else
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"Error en registro: {error}");
+
+                }
+                return null;
 
             }
-            catch
+            catch (Exception ex)
             {
-
+                Console.WriteLine($"Error al registrar: {ex.Message}");
+                return null;
             }
 
         }
