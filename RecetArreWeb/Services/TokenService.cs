@@ -24,14 +24,10 @@ namespace RecetArreWeb.Services
             this.jsRuntime= jsRuntime;
         }
 
-
-
-       
         public async Task EliminarToken()
         {
             await jsRuntime.InvokeVoidAsync("localStorage.removeItem",TOKEN_KEY);
             await jsRuntime.InvokeVoidAsync("localStorage.removeItem", EXPIRACION_KEY);
-
 
         }
       
@@ -67,11 +63,7 @@ namespace RecetArreWeb.Services
             return null;
         }
 
-        Task<string> ITokenService.ObtenerToken()
-        {
-            throw new NotImplementedException();
-        }
-
+        
         public async Task<string?> ObtenerToken()
         {
             try

@@ -51,25 +51,19 @@ namespace RecetArreWeb.Services
             }
         }
         
-        public async Task<RespuestaAutenticacion?> Registrar(CredencialesUsuario credencialesUsuario)
+        public async Task<RespuestaAutenticacion?> Registrar(CredencialesUsuario credenciales)
         {
             try
             {
-                var response = await httpClient.PostAsJsonAsync($"{endpoint}/Registrar", credencialesUsuario);
+                var response = await httpClient.PostAsJsonAsync($"{endpoint}/Registrar", credenciales);
                 if (response.IsSuccessStatusCode)
                 {
-                   var respuesta = await response.Content.ReadFromJsonAsync<RespuestaAutenticacion>();
+                    var respuesta = await response.Content.ReadFromJsonAsync<RespuestaAutenticacion>();
                     if (respuesta != null)
                     {
                         await tokenService.GuardarToken(respuesta.Token, respuesta.Expiracion);
                         return respuesta;
                     }
-                }
-                else
-                {
-                    var error = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"Error en registro: {error}");
-
                 }
                 return null;
 
@@ -82,19 +76,46 @@ namespace RecetArreWeb.Services
 
         }
 
-        Task IAuthService.Logout()
+       public async Task Logout()
         {
-            throw new NotImplementedException();
+            await tokenService.EliminarToken();
         }
 
-        Task<RespuestaAutenticacion?> IAuthService.Registrar(CredencialesUsuario credencialesUsuario)
+
+        public async Task<RespuestaAutenticacion?> RenovarToken()
         {
-            throw new NotImplementedException();
+            try
+            {
+                var token = await tokenService.ObtenerToken();
+
+                if (string.IsNullOrEmpty(token))
+                    return null;
+
+                //AGREGAR AL TOKEN ACTUAL AL HEADER
+
+                httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+                var response=await httpClient.GetAsync($"{endpoint}/RenovarToken");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var respuesta=await response.Content.ReadFromJsonAsync<RespuestaAutenticacion>();
+
+                    if(response != null)
+                    {
+                        await tokenService.GuardarToken(respuesta!.Token, respuesta.Expiracion);
+                        return respuesta;
+                    }
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al renovar token: {ex.Message}");
+                return null;
+            }
         }
 
-        Task<RespuestaAutenticacion?> IAuthService.RenovarToken()
-        {
-            throw new NotImplementedException();
-        }
-    }
-}
+    }//fin clase authservice
+}//fin namespace
