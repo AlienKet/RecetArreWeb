@@ -62,6 +62,11 @@ namespace RecetArreWeb.Auth
 
         }
 
+        public void NotificarLogout()
+        {
+            NotifyAuthenticationStateChanged(Task.FromResult(anonimo));
+        }
+
 
     }//fin clase authstateprovider
 }//fin namespace
