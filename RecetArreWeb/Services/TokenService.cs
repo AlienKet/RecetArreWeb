@@ -16,7 +16,7 @@ namespace RecetArreWeb.Services
     {
 
         private readonly IJSRuntime jsRuntime; //
-        private const string TOKEN_KEY = "autToken";
+        private const string TOKEN_KEY = "authToken";
         private const string EXPIRACION_KEY = "tokenExpiracion";
 
         public TokenService(IJSRuntime jsRuntime)
