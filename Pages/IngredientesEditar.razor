@@ -1,0 +1,107 @@
+﻿@page "/ingredientes/editar/{Id:int}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IIngredienteService ingredienteService
+@inject NavigationManager navigation
+
+<PageTitle>Editar Ingrediente</PageTitle>
+
+<div class="container py-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h3 class="mb-0">Modificar Ingrediente</h3>
+        </div>
+        <div class="card-body">
+            @if (modeloEdicion == null)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status"></div>
+                    <p class="mt-2">Cargando datos...</p>
+                </div>
+            }
+            else
+            {
+                <EditForm Model="modeloEdicion" OnValidSubmit="GuardarCambios">
+                    <DataAnnotationsValidator />
+
+                    @if (!string.IsNullOrEmpty(mensajeError))
+                    {
+                        <div class="alert alert-danger">@mensajeError</div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Nombre *</label>
+                        <InputText class="form-control" @bind-Value="modeloEdicion.Nombre" />
+                        <ValidationMessage For="@(() => modeloEdicion.Nombre)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Unidad de Medida *</label>
+                        <InputText class="form-control" @bind-Value="modeloEdicion.UnidadMedida" />
+                        <ValidationMessage For="@(() => modeloEdicion.UnidadMedida)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Descripción</label>
+                        <InputTextArea class="form-control" rows="3" @bind-Value="modeloEdicion.Descripcion" />
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-success">Guardar Cambios</button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="Cancelar">Cancelar</button>
+                    </div>
+                </EditForm>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private IngredienteModificacionDto? modeloEdicion;
+    private string mensajeError = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Buscamos el ingrediente original por su ID
+        var ingredienteOriginal = await ingredienteService.ObtenerPorId(Id);
+
+        if (ingredienteOriginal != null)
+        {
+            // 2. Pasamos los datos al modelo del formulario
+            modeloEdicion = new IngredienteModificacionDto
+            {
+                Nombre = ingredienteOriginal.Nombre,
+                UnidadMedida = ingredienteOriginal.UnidadMedida,
+                Descripcion = ingredienteOriginal.Descripcion
+            };
+        }
+        else
+        {
+            mensajeError = "No se encontró el ingrediente solicitado.";
+        }
+    }
+
+    private async Task GuardarCambios()
+    {
+        if (modeloEdicion != null)
+        {
+            // Enviamos la actualización a la API
+            var exito = await ingredienteService.Actualizar(Id, modeloEdicion);
+
+            if (exito)
+            {
+                // Navegación relativa de vuelta a la lista (¡sin el slash inicial!)
+                navigation.NavigateTo("ingredientes");
+            }
+            else
+            {
+                mensajeError = "Ocurrió un error al intentar actualizar el ingrediente.";
+            }
+        }
+    }
+
+    // Navegación relativa para cancelar
+    private void Cancelar() => navigation.NavigateTo("ingredientes");
+}

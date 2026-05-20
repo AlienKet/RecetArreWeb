@@ -1,0 +1,14 @@
+# Build results
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+
+# Blazor
+.vscode/
+.vs/
+
+# Vercel
+.vercel

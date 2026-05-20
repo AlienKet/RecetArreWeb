@@ -1,0 +1,196 @@
+﻿@page "/ingredientes"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IIngredienteService ingredienteService 
+@inject NavigationManager navigation 
+@inject IJSRuntime JSRuntime 
+
+
+<PageTitle>Ingredientes</PageTitle>
+
+<div class="container py-4">
+    <h1 class="mb-4">Despensa de Ingredientes</h1>
+
+    @* aqui se muestra el aviso si algo salio bien *@
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success">@mensajeExito</div>
+    }
+    @* aqui se muestra el aviso si algo salio mal *@
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger">@mensajeError</div>
+    }
+
+    <div class="row mb-3">
+        <div class="col-md-9">
+            @* este es el cuadro para buscar por nombre mientras se escribe *@
+            <input type="text" class="form-control" placeholder="Buscar ingrediente..."
+                   @bind="busqueda" @bind:event="oninput" />
+        </div>
+        <div class="col-md-3">
+            @* este boton nos manda a la pagina de crear uno nuevo *@
+            <button class="btn btn-success w-100" @onclick="IrACrear">+ Nuevo Ingrediente</button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Nombre</th>
+                    <th>Unidad de Medida</th>
+                    <th>Descripcion</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (ingredientes == null)
+                {
+                    @* esto sale mientras se cargan los datos de la api *@
+                    <tr>
+                        <td colspan="4" class="text-center py-4">
+                            <div class="spinner-border" role="status"></div>
+                            <p class="mt-2">Cargando despensa...</p>
+                        </td>
+                    </tr>
+                }
+                else if (!IngredientesFiltrados.Any())
+                {
+                   
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">
+                            No se encontraron ingredientes.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @* aqui recorremos la lista para mostrar cada ingrediente en una fila *@
+                    @foreach (var ing in IngredientesFiltrados)
+                    {
+                        <tr>
+                            <td class="fw-bold">@ing.Nombre</td>
+                            <td><span class="badge bg-info text-dark">@ing.UnidadMedida</span></td>
+                            <td class="text-muted small">@ing.Descripcion</td>
+                            <td class="text-end">
+                                @* botones para editar o borrar cada uno *@
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => IrAEditar(ing.Id)"> Editar</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Eliminar(ing.Id)">Eliminar</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* Modal para crear nuevo ingrediente *@
+    @if (mostrarModalCrear)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content shadow-lg">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title">Nuevo Ingrediente</h5>
+                        <button type="button" class="btn-close btn-close-white" @onclick="CerrarModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <EditForm Model="nuevoIngrediente" OnValidSubmit="GuardarIngrediente">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Nombre *</label>
+                                <InputText class="form-control" @bind-Value="nuevoIngrediente.Nombre" placeholder="Ej. Consome" />
+                                <ValidationMessage For="@(() => nuevoIngrediente.Nombre)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Unidad de Medida *</label>
+                                <InputText class="form-control" @bind-Value="nuevoIngrediente.UnidadMedida" placeholder="Ej. Gramos, ml, Kg" />
+                                <ValidationMessage For="@(() => nuevoIngrediente.UnidadMedida)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Descripción</label>
+                                <InputTextArea class="form-control" @bind-Value="nuevoIngrediente.Descripcion" rows="2" placeholder="Opcional..." />
+                            </div>
+
+                            <div class="modal-footer mt-4">
+                                <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                                <button type="submit" class="btn btn-success px-4">Guardar</button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<IngredienteDto>? ingredientes; // aqui se guardan todos los ingredientes
+    private string busqueda = ""; // lo que el usuario escribe para buscar
+    private string mensajeExito = ""; // el texto de la alerta verde
+    private string mensajeError = "";
+
+    //variables para ventana emergente 
+    private bool mostrarModalCrear = false;
+    private IngredienteCreacionDto nuevoIngrediente = new();
+
+    // se filtra la lista segun lo que se escribe en el buscador
+    private IEnumerable<IngredienteDto> IngredientesFiltrados =>
+        ingredientes?.Where(i => i.Nombre.Contains(busqueda, StringComparison.OrdinalIgnoreCase))
+        ?? Enumerable.Empty<IngredienteDto>();
+
+    // esto se corre apenas se entra a la pagina para traer los datos
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarIngredientes();
+    }
+
+    private async Task CargarIngredientes()// funcion para ir a la api por los ingredientes
+    {
+        ingredientes = await ingredienteService.ObtenerTodos();
+    }
+    //ventana emergente para crear un nuevo ingrediente
+    private void IrACrear()
+    {
+        nuevoIngrediente = new IngredienteCreacionDto();
+        mostrarModalCrear = true;
+    }
+    //Modal es la ventana emergente
+    private void CerrarModal() => mostrarModalCrear = false;
+
+    private async Task GuardarIngrediente()
+    {
+        var resultado = await ingredienteService.Crear(nuevoIngrediente);
+        if (resultado != null)
+        {
+            mensajeExito = "Ingrediente creado correctamente";
+            mostrarModalCrear = false;// se recarga la lista para mostrar el nuevo ingrediente
+            await CargarIngredientes();// se limpia el formulario
+        }
+        else
+        {
+            mensajeError = "Error al crear el ingrediente.";
+        }
+    }
+
+    // funcion para borrar un ingrediente
+    private async Task Eliminar(int id)
+    {
+        // primero preguntamos si de verdad se quiere borrar
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Seguro que quieres borrar este ingrediente?")) return;
+
+        //se borra
+        if (await ingredienteService.Eliminar(id))
+        {
+            mensajeExito = "Ingrediente borrado correctamente";
+            await CargarIngredientes();
+        }
+    }
+
+    //saltar a la pagina de editar con el id del ingrediente
+    private void IrAEditar(int id) => navigation.NavigateTo($"ingredientes/editar/{id}");
+}

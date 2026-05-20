@@ -1,0 +1,286 @@
+@page "/categorias"
+@using RecetArreWeb.DTOs
+@inject ICategoriaService categoriaService
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+<PageTitle>Categorias</PageTitle>
+
+<div class="container py-4">
+
+    @* Titulo de la pagina *@
+    <h1 class="mb-4">Categorias</h1>
+
+    @* Mensajes de exito o error *@
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger">@mensajeError</div>
+    }
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success">@mensajeExito</div>
+    }
+
+    @* Campo para buscar categorias por nombre *@
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <input type="text" class="form-control" placeholder="Buscar categoria..."
+                   @bind="busqueda" @bind:event="oninput" />
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100" @onclick="LimpiarBusqueda">Limpiar</button>
+        </div>
+    </div>
+
+    @* Tabla de categorias *@
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Descripcion</th>
+                    <th>Fecha Creacion</th>
+                    @* Columna de acciones con el boton de nueva categoria arriba *@
+                    <th class="text-end">
+                        <button class="btn btn-success btn-sm" @onclick="AbrirModalCrear">+ Nueva Categoria</button>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (categorias == null)
+                {
+                    @* Spinner mientras carga los datos *@
+                    <tr>
+                        <td colspan="5" class="text-center py-4">
+                            <div class="spinner-border" role="status"></div>
+                            <p class="mt-2">Cargando categorias...</p>
+                        </td>
+                    </tr>
+                }
+                else if (!CategoriasFiltradas.Any())
+                {
+                    @* Mensaje si no hay categorias *@
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            No hay categorias para mostrar
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @* Muestra cada categoria en una fila *@
+                    @foreach (var categoria in CategoriasFiltradas)
+                    {
+                        <tr>
+                            <td>@categoria.Id</td>
+                            <td class="fw-semibold">@categoria.Nombre</td>
+                            <td class="text-muted">
+                                @(string.IsNullOrEmpty(categoria.Descripcion) ? "-" : categoria.Descripcion)
+                            </td>
+                            <td>@categoria.CreadoUtc.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="text-end">
+                                @* Boton para editar *@
+                                <button class="btn btn-sm btn-outline-primary me-1"
+                                        @onclick="() => AbrirModalEditar(categoria)">
+                                    Editar
+                                </button>
+                                @* Boton para eliminar *@
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="() => EliminarCategoria(categoria.Id)">
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* Modal para crear o editar una categoria *@
+@if (mostrarModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    @* El titulo cambia dependiendo si es crear o editar *@
+                    <h5 class="modal-title">
+                        @(categoriaEditando == null ? "Nueva Categoria" : "Editar Categoria")
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    @* Campo para el nombre de la categoria *@
+                    <div class="mb-3">
+                        <label class="form-label">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="nombreCategoria"
+                               placeholder="Ej: Postres, Ensaladas..." />
+                    </div>
+                    @* Campo opcional para la descripcion *@
+                    <div class="mb-3">
+                        <label class="form-label">Descripcion</label>
+                        <textarea class="form-control" rows="3" @bind="descripcionCategoria"
+                                  placeholder="Descripcion opcional..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="GuardarCategoria">
+                        @(categoriaEditando == null ? "Crear" : "Guardar cambios")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // Lista de categorias obtenida del servicio
+    private List<CategoriaDto>? categorias;
+
+    // Variable para el buscador
+    private string busqueda = "";
+
+    // Variables para controlar el modal
+    private bool mostrarModal = false;
+    private CategoriaDto? categoriaEditando = null;
+
+    // Variables para los campos del formulario
+    private string nombreCategoria = "";
+    private string descripcionCategoria = "";
+
+    // Variables para mensajes al usuario
+    private string mensajeError = string.Empty;
+    private string mensajeExito = string.Empty;
+
+    // Filtra las categorias segun lo que el usuario escribe en el buscador
+    private IEnumerable<CategoriaDto> CategoriasFiltradas
+    {
+        get
+        {
+            if (categorias == null) return Enumerable.Empty<CategoriaDto>();
+            if (string.IsNullOrWhiteSpace(busqueda)) return categorias;
+            return categorias.Where(c =>
+                c.Nombre.Contains(busqueda, StringComparison.OrdinalIgnoreCase) ||
+                (c.Descripcion?.Contains(busqueda, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+    }
+
+    // Se ejecuta al cargar la pagina
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCategorias();
+    }
+
+    // Obtiene las categorias del servicio real
+    private async Task CargarCategorias()
+    {
+        categorias = await categoriaService.ObtenerTodas();
+    }
+
+    // Abre el modal para crear una nueva categoria
+    private void AbrirModalCrear()
+    {
+        categoriaEditando = null;
+        nombreCategoria = "";
+        descripcionCategoria = "";
+        mensajeError = string.Empty;
+        mostrarModal = true;
+    }
+
+    // Abre el modal con los datos de la categoria a editar
+    private void AbrirModalEditar(CategoriaDto categoria)
+    {
+        categoriaEditando = categoria;
+        nombreCategoria = categoria.Nombre;
+        descripcionCategoria = categoria.Descripcion ?? "";
+        mensajeError = string.Empty;
+        mostrarModal = true;
+    }
+
+    // Cierra el modal y limpia los campos
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        categoriaEditando = null;
+        nombreCategoria = "";
+        descripcionCategoria = "";
+        mensajeError = string.Empty;
+    }
+
+    // Guarda la categoria, ya sea creando una nueva o editando una existente
+    private async Task GuardarCategoria()
+    {
+        // Valida que el nombre no este vacio
+        if (string.IsNullOrWhiteSpace(nombreCategoria))
+        {
+            mensajeError = "El nombre es requerido";
+            return;
+        }
+
+        if (categoriaEditando == null)
+        {
+            // Crea una nueva categoria en el backend
+            var nueva = new CategoriaCreacionDto
+            {
+                Nombre = nombreCategoria,
+                Descripcion = string.IsNullOrWhiteSpace(descripcionCategoria) ? null : descripcionCategoria
+            };
+            var resultado = await categoriaService.Crear(nueva);
+            if (resultado != null)
+            {
+                mensajeExito = "Categoria creada correctamente";
+                await CargarCategorias();
+                CerrarModal();
+            }
+            else
+            {
+                mensajeError = "No se pudo crear la categoria";
+            }
+        }
+        else
+        {
+            // Actualiza los datos de la categoria existente en el backend
+            var modificacion = new CategoriaModificacionDto
+            {
+                Nombre = nombreCategoria,
+                Descripcion = string.IsNullOrWhiteSpace(descripcionCategoria) ? null : descripcionCategoria
+            };
+            var resultado = await categoriaService.Actualizar(categoriaEditando.Id, modificacion);
+            if (resultado)
+            {
+                mensajeExito = "Categoria actualizada correctamente";
+                await CargarCategorias();
+                CerrarModal();
+            }
+            else
+            {
+                mensajeError = "No se pudo actualizar la categoria";
+            }
+        }
+    }
+
+    // Elimina una categoria de la base de datos
+    private async Task EliminarCategoria(int id)
+    {
+        var resultado = await categoriaService.Eliminar(id);
+        if (resultado)
+        {
+            mensajeExito = "Categoria eliminada correctamente";
+            await CargarCategorias();
+        }
+        else
+        {
+            mensajeError = "No se pudo eliminar la categoria";
+        }
+    }
+
+    // Limpia el campo de busqueda
+    private void LimpiarBusqueda()
+    {
+        busqueda = "";
+    }
+}

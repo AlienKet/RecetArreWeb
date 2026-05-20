@@ -1,0 +1,111 @@
+﻿@page "/comentarios/{RecetaId:int}"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IComentarioService comentarioService
+@inject NavigationManager navigation
+@inject IJSRuntime JSRuntime 
+@*Runtime es para alertas*@
+
+<PageTitle>Comentarios</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Comentarios de la Receta</h1>
+        @* este boton te regresa a la receta de donde se estaba *@
+        <button class="btn btn-secondary" @onclick="VolverAReceta">Volver a la Receta</button>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <h5>Deja un comentario</h5>
+            @* este es el formulario para escribir un comentario nuevo *@
+            <EditForm Model="nuevoComentario" OnValidSubmit="EnviarComentario">
+                <DataAnnotationsValidator />
+                <div class="mb-3">
+                    @* aqui se vincula lo que se escribe con el objeto del comentario *@
+                    <InputTextArea class="form-control" placeholder="Comenta como te parecio esta receta.."
+                                   rows="3" @bind-Value="nuevoComentario.Contenido" />
+                    <ValidationMessage For="@(() => nuevoComentario.Contenido)" />
+                </div>
+                <button type="submit" class="btn btn-primary">Publicar Comentario</button>
+            </EditForm>
+        </div>
+    </div>
+
+    <div class="list-group">
+        @if (comentarios == null)
+        {
+
+            <div class="text-center">
+                <div class="spinner-border" role="status"></div>
+            </div>
+        }
+        else if (!comentarios.Any())
+        {
+           
+            <div class="alert alert-light text-center border">
+                No hay Comentarios
+            </div>
+        }
+        else
+        {
+            @* aqui se muestran todos los comentarios uno por uno *@
+            @foreach (var com in comentarios)
+            {
+                <div class="list-group-item mb-2 shadow-sm border-start border-4 border-primary">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1 fw-bold text-primary">Usuario ID: @com.UsuarioId.Substring(0, 5)...</h6>
+                        <small class="text-muted">@com.CreadoUtc.ToLocalTime().ToString("g")</small>
+                    </div>
+                    <p class="mb-1">@com.Contenido</p>
+                    <div class="text-end">
+                        @* este boton es para borrar el comentario *@
+                        <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => Eliminar(com.Id)">Eliminar</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public int RecetaId { get; set; } // aqui se recibe el id de la receta desde la url
+    private List<ComentarioDto>? comentarios; // aqui se guardan los comentarios que traiga la api
+    private ComentarioCreacionDto nuevoComentario = new(); // objeto vacio para el nuevo comentario
+
+    protected override async Task OnInitializedAsync()
+    {
+        nuevoComentario.RecetaId = RecetaId; // se le asigna el id de la receta al nuevo comentario
+        await CargarComentarios(); // se mandan a traer los comentarios
+    }
+
+    // funcion para ir a la api por los comentarios
+    private async Task CargarComentarios()
+    {
+        comentarios = await comentarioService.ObtenerPorReceta(RecetaId);
+    }
+
+    // aqui se manda el comentario a la base de datos
+    private async Task EnviarComentario()
+    {
+        var exito = await comentarioService.Crear(nuevoComentario);
+        if (exito)
+        {
+            // se limpia el cuadro de texto y recargamos la lista
+            nuevoComentario = new ComentarioCreacionDto { RecetaId = RecetaId };
+            await CargarComentarios();
+        }
+    }
+
+    // funcion para borrar el comentario
+    private async Task Eliminar(int id)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "Quieres borrar este comentario?"))
+        {
+            if (await comentarioService.Eliminar(id)) await CargarComentarios();
+        }
+    }
+
+    // para regresar a la receta
+    private void VolverAReceta() => navigation.NavigateTo($"recetas/{RecetaId}");
+}

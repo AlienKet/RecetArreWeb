@@ -1,0 +1,475 @@
+﻿@page "/recetas"
+@using Microsoft.AspNetCore.Authorization
+@using RecetArreWeb.DTOs
+@attribute [Authorize]
+@inject IRecetaService recetaService
+@inject ICategoriaService categoriaService
+@inject IIngredienteService ingredienteService
+@inject NavigationManager navigation
+@inject IJSRuntime JSRuntime
+@inject HttpClient Http
+
+<PageTitle>Recetas</PageTitle>
+
+<div class="container py-4">
+
+    @* Titulo de la pagina *@
+    <h1 class="mb-4">Mis Recetas</h1>
+
+    @* Mensajes de exito o error *@
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @mensajeExito
+            <button type="button" class="btn-close" @onclick='() => mensajeExito = ""'></button>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @mensajeError
+            <button type="button" class="btn-close" @onclick='() => mensajeError = ""'></button>
+        </div>
+    }
+
+    @* Filtros para buscar recetas por nombre o categoria *@
+    <div class="row mb-3">
+        <div class="col-md-5">
+            @* Campo de texto para buscar por nombre *@
+            <input type="text" class="form-control" placeholder="Buscar receta..."
+                   @bind="busqueda" @bind:event="oninput" />
+        </div>
+        <div class="col-md-4">
+            @* Lista desplegable para filtrar por categoria *@
+            <select class="form-select" @bind="categoriaFiltro">
+                <option value="0">Todas las categorias</option>
+                @if (categorias != null)
+                {
+                    @foreach (var cat in categorias)
+                    {
+                        <option value="@cat.Id">@cat.Nombre</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            @* Boton para limpiar los filtros *@
+            <button class="btn btn-outline-secondary w-100" @onclick="LimpiarFiltros">Limpiar</button>
+        </div>
+    </div>
+
+    @* Tabla de recetas *@
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Titulo</th>
+                    <th>Descripcion</th>
+                    <th>Categorías</th>
+                    <th>Ingredientes</th>
+                    <th>Tiempo</th>
+                    <th>Porciones</th>
+                    <th>Estado</th>
+                    <th>Calificación</th>
+                    <th class="text-end">
+                        <button class="btn btn-success btn-sm" @onclick="IrACrear">+ Nueva Receta</button>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (recetas == null)
+                {
+                    @* Spinner mientras carga los datos *@
+                    <tr>
+                        <td colspan="9" class="text-center py-4">
+                            <div class="spinner-border" role="status"></div>
+                            <p class="mt-2">Cargando recetas...</p>
+                        </td>
+                    </tr>
+                }
+                else if (!RecetasFiltradas.Any())
+                {
+                    @* Mensaje si no hay recetas *@
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            No hay recetas. ¡Crea tu primera receta!
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @* Muestra cada receta en una fila *@
+                    @foreach (var receta in RecetasFiltradas)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@receta.Titulo</td>
+                            <td class="text-muted text-truncate" style="max-width: 120px;">
+                                @(string.IsNullOrEmpty(receta.Descripcion) ? "Sin descripcion" : receta.Descripcion)
+                            </td>
+                            <td>
+                                @* Vista previa de las categorías asignadas *@
+                                @if (receta.CategoriaIds != null && receta.CategoriaIds.Any() && categorias != null)
+                                {
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var id in receta.CategoriaIds)
+                                        {
+                                            var nomCat = categorias.FirstOrDefault(c => c.Id == id)?.Nombre;
+                                            if (!string.IsNullOrEmpty(nomCat))
+                                            {
+                                                <span class="badge bg-info text-dark">@nomCat</span>
+                                            }
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Sin categoría</span>
+                                }
+                            </td>
+                            <td>
+                                @* Mapeo y vista previa de los ingredientes asignados *@
+                                @if (receta.IngredienteIds != null && receta.IngredienteIds.Any() && todosLosIngredientes != null)
+                                {
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var id in receta.IngredienteIds)
+                                        {
+                                            var nomIng = todosLosIngredientes.FirstOrDefault(i => i.Id == id)?.Nombre;
+                                            if (!string.IsNullOrEmpty(nomIng))
+                                            {
+                                                <span class="badge bg-light text-dark border">@nomIng</span>
+                                            }
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Sin ingredientes</span>
+                                }
+                            </td>
+                            <td>⏱ @(receta.TiempoPreparacionMinutos + receta.TiempoCoccionMinutos) min</td>
+                            <td>🍽 @receta.Porciones</td>
+                            <td>
+                                @if (receta.EstaPublicado)
+                                {
+                                    <span class="badge bg-success">Publicado</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Borrador</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="star-rating text-nowrap">
+                                        @for (int i = 1; i <= 5; i++)
+                                        {
+                                            int estrellaActual = i;
+                                            <i class="bi @(estrellaActual <= Math.Round(receta.PromedioCalificacion) ? "bi-star-fill" : "bi-star") star-icon"
+                                               @onclick="() => Calificar(receta.Id, estrellaActual)"
+                                               style="cursor: pointer; color: #ffc107; font-size: 1.1rem;"
+                                               title="Calificar con @estrellaActual estrellas"></i>
+                                        }
+                                    </div>
+                                    <span class="ms-2 small text-muted fw-bold">
+                                        (@receta.PromedioCalificacion.ToString("0.0"))
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-primary me-1" @onclick="() => IrADetalle(receta.Id)">Ver Detalles</button>
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => IrAEditar(receta.Id)">Editar</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarReceta(receta.Id)">Eliminar</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* Modal para crear nueva receta *@
+@if (mostrarModalCrear)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Nueva Receta</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CerrarModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="nuevaReceta" OnValidSubmit="GuardarReceta">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Título *</label>
+                                <InputText class="form-control" @bind-Value="nuevaReceta.Titulo" placeholder="Ej. Pay de Limón" />
+                                <ValidationMessage For="@(() => nuevaReceta.Titulo)" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Descripción</label>
+                                <InputTextArea class="form-control" @bind-Value="nuevaReceta.Descripcion" rows="2" placeholder="Breve descripción..." />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Prep. (min)</label>
+                                <InputNumber class="form-control" @bind-Value="nuevaReceta.TiempoPreparacionMinutos" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Cocción (min)</label>
+                                <InputNumber class="form-control" @bind-Value="nuevaReceta.TiempoCoccionMinutos" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Porciones</label>
+                                <InputNumber class="form-control" @bind-Value="nuevaReceta.Porciones" />
+                            </div>
+
+                            @* SECCIÓN: Selección de Categorías *@
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Categorías</label>
+                                <div class="border rounded p-3 bg-light" style="max-height: 130px; overflow-y: auto;">
+                                    @if (categorias == null || !categorias.Any())
+                                    {
+                                        <p class="text-muted small mb-0">No hay categorías registradas. Agrégalas en el módulo correspondiente.</p>
+                                    }
+                                    else
+                                    {
+                                        <div class="row">
+                                            @foreach (var cat in categorias)
+                                            {
+                                                <div class="col-md-4 col-sm-6 mb-2">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input"
+                                                               type="checkbox"
+                                                               id="crearcat-@cat.Id"
+                                                               checked="@nuevaReceta.CategoriaIds.Contains(cat.Id)"
+                                                               @onchange="@((ChangeEventArgs e) => AlternarCategoriaCrear(cat.Id, e.Value!))" />
+                                                        <label class="form-check-label small shadow-none" for="crearcat-@cat.Id">
+                                                            @cat.Nombre
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            @* SECCIÓN: Selección de Ingredientes *@
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Ingredientes</label>
+                                <div class="border rounded p-3 bg-light" style="max-height: 150px; overflow-y: auto;">
+                                    @if (todosLosIngredientes == null || !todosLosIngredientes.Any())
+                                    {
+                                        <p class="text-muted small mb-0">No hay ingredientes registrados. Agrégalos en el módulo de Ingredientes.</p>
+                                    }
+                                    else
+                                    {
+                                        <div class="row">
+                                            @foreach (var ing in todosLosIngredientes)
+                                            {
+                                                <div class="col-md-6 mb-2">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input"
+                                                               type="checkbox"
+                                                               id="crearing-@ing.Id"
+                                                               checked="@nuevaReceta.IngredienteIds.Contains(ing.Id)"
+                                                               @onchange="@((ChangeEventArgs e) => AlternarIngredienteCrear(ing.Id, e.Value!))" />
+                                                        <label class="form-check-label small" for="crearing-@ing.Id">
+                                                            @ing.Nombre <span class="text-muted">(@ing.UnidadMedida)</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Instrucciones *</label>
+                                <InputTextArea class="form-control" @bind-Value="nuevaReceta.Instrucciones" rows="4" placeholder="Paso a paso..." />
+                                <ValidationMessage For="@(() => nuevaReceta.Instrucciones)" />
+                            </div>
+                        </div>
+                        <div class="modal-footer mt-4">
+                            <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                            <button type="submit" class="btn btn-success px-4">Guardar Receta</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .star-icon:hover {
+        transform: scale(1.2);
+        transition: transform 0.1s ease-in-out;
+    }
+</style>
+
+@code {
+    private List<RecetaDto>? recetas;
+    private List<CategoriaDto>? categorias;
+    private List<IngredienteDto>? todosLosIngredientes;
+
+    private string busqueda = "";
+    private int categoryFiltro = 0; // Se conserva para el bind del componente original
+    private int categoriaFiltro { get => categoryFiltro; set => categoryFiltro = value; }
+
+    private string mensajeExito = string.Empty;
+    private string mensajeError = string.Empty;
+
+    private bool mostrarModalCrear = false;
+    private RecetaCreacionDto nuevaReceta = new();
+
+    private IEnumerable<RecetaDto> RecetasFiltradas
+    {
+        get
+        {
+            if (recetas == null) return Enumerable.Empty<RecetaDto>();
+            var resultado = recetas.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(busqueda))
+                resultado = resultado.Where(r =>
+                    r.Titulo.Contains(busqueda, StringComparison.OrdinalIgnoreCase));
+
+            if (categoriaFiltro > 0)
+                resultado = resultado.Where(r => r.CategoriaIds.Contains(categoriaFiltro));
+
+            return resultado;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            var tareaRecetas = recetaService.ObtenerTodas();
+            var tareaCategorias = categoriaService.ObtenerTodas();
+            var tareaIngredientes = ingredienteService.ObtenerTodos();
+
+            await Task.WhenAll(tareaRecetas, tareaCategorias, tareaIngredientes);
+
+            recetas = tareaRecetas.Result;
+            categorias = tareaCategorias.Result;
+            todosLosIngredientes = tareaIngredientes.Result;
+        }
+        catch (Exception ex)
+        {
+            mensajeError = "Error al conectar con el servidor.";
+            Console.WriteLine(ex.Message);
+        }
+    }
+
+    // MANEJADOR: Inserta o remueve los IDs seleccionados en la creación de categorías
+    private void AlternarCategoriaCrear(int id, object marcado)
+    {
+        if ((bool)marcado)
+        {
+            if (!nuevaReceta.CategoriaIds.Contains(id))
+            {
+                nuevaReceta.CategoriaIds.Add(id);
+            }
+        }
+        else
+        {
+            nuevaReceta.CategoriaIds.Remove(id);
+        }
+    }
+
+    // MANEJADOR: Inserta o remueve los IDs seleccionados en la creación de ingredientes
+    private void AlternarIngredienteCrear(int id, object marcado)
+    {
+        if ((bool)marcado)
+        {
+            if (!nuevaReceta.IngredienteIds.Contains(id))
+            {
+                nuevaReceta.IngredienteIds.Add(id);
+            }
+        }
+        else
+        {
+            nuevaReceta.IngredienteIds.Remove(id);
+        }
+    }
+
+    private async Task Calificar(int recetaId, int puntos)
+    {
+        mensajeError = string.Empty;
+        mensajeExito = string.Empty;
+
+        var ratingDto = new { Calificacion = puntos, RecetaId = recetaId };
+        var response = await Http.PostAsJsonAsync("api/Ratings", ratingDto);
+
+        if (response.IsSuccessStatusCode)
+        {
+            mensajeExito = "¡Gracias por calificar!";
+            await CargarDatos();
+        }
+        else
+        {
+            mensajeError = "No se pudo registrar la calificación porque ya calificaste)";
+        }
+    }
+
+    private void IrACrear()
+    {
+        nuevaReceta = new RecetaCreacionDto { EstaPublicado = true, Porciones = 1, IngredienteIds = new(), CategoriaIds = new() };
+        mostrarModalCrear = true;
+    }
+
+    private void CerrarModal() => mostrarModalCrear = false;
+
+    private async Task GuardarReceta()
+    {
+        var resultado = await recetaService.Crear(nuevaReceta);
+        if (resultado != null)
+        {
+            mensajeExito = "Receta creada correctamente";
+            mostrarModalCrear = false;
+            await CargarDatos();
+        }
+        else
+        {
+            mensajeError = "No se pudo crear la receta. Revisa los campos.";
+        }
+    }
+
+    private async Task EliminarReceta(int id)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Seguro que quieres eliminar esta receta?"))
+            return;
+
+        mensajeError = string.Empty;
+        mensajeExito = string.Empty;
+
+        var resultado = await recetaService.Eliminar(id);
+
+        if (resultado)
+        {
+            mensajeExito = "Receta eliminada correctamente";
+            await CargarDatos();
+        }
+        else
+        {
+            mensajeError = "No se pudo eliminar la receta";
+        }
+    }
+
+    private void IrADetalle(int id) => navigation.NavigateTo($"recetas/{id}");
+    private void IrAEditar(int id) => navigation.NavigateTo($"recetas/editar/{id}");
+
+    private void LimpiarFiltros()
+    {
+        busqueda = "";
+        categoriaFiltro = 0;
+    }
+}

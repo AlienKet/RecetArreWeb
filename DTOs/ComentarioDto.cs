@@ -1,0 +1,30 @@
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace RecetArreWeb.DTOs
+{
+    public class ComentarioDto
+    {
+        public int Id { get; set; }
+        public string Contenido { get; set; } = default!;
+        public int RecetaId { get; set; }
+        public string UsuarioId { get; set; } = default!;
+        public DateTime CreadoUtc { get; set; }
+
+    }
+    public class ComentarioCreacionDto
+    {
+        [Required]
+        [StringLength(1000, MinimumLength = 1)]
+        public string Contenido { get; set; } = default!;
+
+        [Required]
+        public int RecetaId { get; set; }
+    }
+
+    public class ComentarioModificacionDto
+    {
+        [Required]
+        [StringLength(1000, MinimumLength = 1)]
+        public string Contenido { get; set; } = default!;
+    }
+}
