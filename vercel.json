@@ -1,27 +1,11 @@
 {
-  "version": 2,
-  "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
-  "headers": [
+  "buildCommand": "dotnet publish -c Release",
+  "outputDirectory": "bin/Release/net8.0/publish/wwwroot",
+  "rewrites": [
     {
       "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Cross-Origin-Embedder-Policy",
-          "value": "require-corp"
-        },
-        {
-          "key": "Cross-Origin-Opener-Policy",
-          "value": "same-origin"
-        }
-      ]
+      "destination": "/index.html"
     }
-  ]
+  ],
+  "installCommand": "wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh && bash dotnet-install.sh"
 }
