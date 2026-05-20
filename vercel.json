@@ -1,10 +1,18 @@
 {
-  "buildCommand": "dotnet publish -c Release",
-  "outputDirectory": "bin/Release/net8.0/publish/wwwroot",
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "RecetArreWeb.csproj",
+      "use": "@vercel/static-build",
+      "config": {
+        "buildCommand": "dotnet publish -c Release",
+        "distDir": "bin/Release/net8.0/publish/wwwroot"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
